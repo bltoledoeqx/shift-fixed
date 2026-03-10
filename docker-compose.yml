@@ -1,0 +1,41 @@
+services:
+  shift-navigator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shift-navigator
+    ports:
+      - "3000:3000"
+    volumes:
+      - shift_data:/app/data
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASS=${ADMIN_PASS:-0zPQP#$4z4}
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-}
+      - TZ=America/Sao_Paulo
+      - VIEWER_USER=${VIEWER_USER:-EMSOPS}
+      - VIEWER_PASS=${VIEWER_PASS:-0zPQP#$4z3}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    restart: unless-stopped
+    networks:
+      - default
+      - npm_proxy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  shift_data:
+    driver: local
+
+networks:
+  default: {}
+  npm_proxy:
+    external: true
