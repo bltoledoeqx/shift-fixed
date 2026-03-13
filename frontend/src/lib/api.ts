@@ -84,7 +84,7 @@ export const importXlsx = async (file: File): Promise<Record<string, unknown>> =
   formData.append('file', file);
   const res = await fetch('/api/import', {
     method: 'POST',
-    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {},
     body: formData,
   });
   if (res.status === 401) { setAuthToken(null); throw new Error('UNAUTHORIZED'); }

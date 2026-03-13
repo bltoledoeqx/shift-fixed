@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Trash2, Plus, Send, Loader2, LogIn, Lock, Upload, CheckCircle, ChevronDown, ChevronRight, GripVertical, Bell } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getTeams, getMembers, getShifts, getOnCall, getConfig, updateConfig,
@@ -793,7 +793,14 @@ function ConfigPageInner() {
   const [shiftModal, setShiftModal] = useState(false);
   const [ocModal, setOcModal] = useState<{ open: boolean; data?: OnCallEntry | null }>({ open: false });
   const [expandedTeams, setExpandedTeams] = useState<Record<string, boolean>>({});
-  const toggleExpand = (id: string) => setExpandedTeams(p => ({ ...p, [id]: !p[id] }));
+  const toggleExpand = (id: string) => setExpandedTeams(p => ({ ...p, [id]: p[id] === undefined ? false : !p[id] }));
+  useEffect(() => {
+    if (teams.length > 0) {
+      const init: Record<string, boolean> = {};
+      teams.forEach(t => { init[t.id] = false; init[`s-${t.id}`] = false; });
+      setExpandedTeams(init);
+    }
+  }, [teams.length]);
 
   const [telegramToken, setTelegramToken] = useState("");
   const [groupChatId, setGroupChatId] = useState("");

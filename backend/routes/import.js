@@ -91,7 +91,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     teamsNeeded.forEach(t => db.prepare('INSERT OR IGNORE INTO teams (id, label, order_num) VALUES (?, ?, ?)').run(t.id, t.label, t.order_num));
 
     // ── Members sheet ──
-    const memberSheet = wb.getWorksheet('Members');
+    const memberSheet = wb.getWorksheet('Membros');
     if (memberSheet) {
       memberSheet.eachRow((row, ri) => {
         if (ri < 2) return;
@@ -112,7 +112,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     // ── Determine date range ──
     let minDate = null, maxDate = null;
-    const shiftsSheet = wb.getWorksheet('Shifts');
+    const shiftsSheet = wb.getWorksheet('Turnos');
     if (shiftsSheet) {
       shiftsSheet.eachRow((row, ri) => {
         if (ri < 2) return;
@@ -183,7 +183,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     }
 
     // ── Time Off sheet ──
-    const timeOffSheet = wb.getWorksheet('Time Off');
+    const timeOffSheet = wb.getWorksheet('Folga');
     if (timeOffSheet) {
       timeOffSheet.eachRow((row, ri) => {
         if (ri < 2) return;
