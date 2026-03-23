@@ -1943,14 +1943,16 @@ document.addEventListener('DOMContentLoaded',()=>{
     console.log('[DeltaPolling] Inicializando...');
 
     const POLLING_INTERVAL = 30000; // 30 segundos
-    let lastSyncTime = new Date().toISOString().split('.')[0].replace('T', ' ');
+    // Inicializa com 10 minutos atrás para garantir que não perdemos nada entre o fetch inicial e o polling
+    let lastSyncTime = new Date(Date.now() - 10 * 60000).toISOString().split('.')[0].replace('T', ' ');
     
     const _HEADERS = { 'Accept': 'application/json', 'X-UserToken': _TOK };
     const _G_IDS = '1c7c9057db6771d0832ead8ed396197a,673c2170476422503cbfe07a216d430f,ff72689247ee1e143cbfe07a216d4357';
     const _FIELDS = 'number,short_description,priority,state,assigned_to,assignment_group,opened_at,u_escalation_type,u_type,sys_updated_on,resolved_at,closed_at,sys_id,account,category,u_close_code,u_internal_cases';
 
     async function fetchDeltas() {
-      const query = 'assignment_groupIN' + _G_IDS + '^sys_updated_on>' + lastSyncTime;
+      // Usamos >= para garantir que não perdemos nada em segundos iguais, o reduce cuida do próximo lastSyncTime
+      const query = 'assignment_groupIN' + _G_IDS + '^sys_updated_on>=' + lastSyncTime;
       const url = _BASE + '/api/now/table/sn_customerservice_case?sysparm_query=' + encodeURIComponent(query) + '&sysparm_fields=' + _FIELDS + '&sysparm_display_value=all&sysparm_limit=100';
 
       try {
@@ -1959,15 +1961,115 @@ document.addEventListener('DOMContentLoaded',()=>{
         const cases = data.result || [];
 
         if (cases.length > 0) {
-          console.log('[DeltaPolling] ' + cases.length + ' casos alterados.');
+          console.log('[DeltaPolling] ' + cases.length + ' registros processados.');
+          let maxUpdated = lastSyncTime;
+          
           cases.forEach(c => {
-            const card = document.querySelector('.card[data-sysid="' + c.sys_id.value + '"]');
-            if (card) updateCard(card, c);
-            else console.log('[DeltaPolling] Novo caso detectado: ' + c.number.display_value);
+            if (c.sys_updated_on.value > maxUpdated) maxUpdated = c.sys_updated_on.value;
+            
+            const sysId = c.sys_id.value;
+            const card = document.querySelector('.card[data-sysid="' + sysId + '"]');
+            
+            if (card) {
+              updateCard(card, c);
+            } else {
+              // Verificar se o caso deve estar visível (não resolvido/fechado recentemente)
+              const state = parseInt(c.state.value);
+              const activeStates = [1, 10, 21, 18, 8, 5, 29, 30, 2]; // Estados ativos comuns
+              if (activeStates.includes(state)) {
+                console.log('[DeltaPolling] Inserindo novo card: ' + c.number.display_value);
+                insertNewCard(c);
+              }
+            }
           });
-          lastSyncTime = cases.reduce((p, c) => (c.sys_updated_on.value > p ? c.sys_updated_on.value : p), lastSyncTime);
+          
+          // Incrementar 1 segundo para evitar pegar os mesmos registros no próximo loop se não houver novos
+          if (maxUpdated !== lastSyncTime) {
+             lastSyncTime = maxUpdated;
+          }
         }
       } catch (err) { console.error('[DeltaPolling] Erro:', err); }
+    }
+
+    function insertNewCard(c) {
+      // Lógica simplificada de renderC para novos cards via Delta
+      const isAw = ['18','32','5','29','30'].includes(c.state.value);
+      const prio = parseInt(c.priority.value || '5');
+      const noAss = !c.assigned_to.value;
+      
+      let lane = 'normal';
+      if (isAw) lane = 'awaiting';
+      else if (noAss) lane = 'orphan';
+      else if (prio === 1) lane = 'critical';
+      else if (prio === 2) lane = 'high';
+      else if (prio === 3) lane = 'medium';
+
+      const colors = ['', '#CF222E', '#BF8700', '#0550AE', '#1A7F37', '#57606A'];
+      const pColor = colors[prio] || '#57606A';
+      const url = _BASE + '/sn_customerservice_case.do?sysparm_query=number=' + c.number.display_value;
+      
+      const html = `
+        <div class="card card-${lane}" data-sysid="${c.sys_id.value}" data-assignedid="${c.assigned_to.value || ''}" data-assignedname="${c.assigned_to.display_value || ''}" onclick="openCaseModal('${c.sys_id.value}','${c.number.display_value}',this)">
+          <div class="card-top">
+            <a class="card-num" href="${url}" target="_blank" onclick="event.stopPropagation()">${c.number.display_value} ↗</a>
+            ${isAw ? `<span class="badge-await">⏳ ${c.state.display_value}</span>` : ''}
+            <button class="card-reassign-btn" title="Reatribuir" data-sysid="${c.sys_id.value}" data-gid="${c.assignment_group.value}" data-assigned="${c.assigned_to.display_value || ''}" onclick="event.stopPropagation();openReassignBtn(event,this)">👤 ✎</button>
+          </div>
+          <p class="card-desc">${(c.short_description.display_value || '—').substring(0, 60)}</p>
+          <div class="sla-bar-wrap"><span class="sla-bar-name" style="color:#57606A">Sincronizando SLA...</span></div>
+          <div class="card-tags">
+            <span class="tag" style="color:${pColor};background:${pColor}15;border-color:${pColor}40">${c.priority.display_value}</span>
+            <span class="tag tag-state">${c.state.display_value}</span>
+            ${c.u_type.display_value ? `<span class="tag tag-type">${c.u_type.display_value}</span>` : ''}
+          </div>
+          <div class="card-footer">
+            <span class="card-assigned ${noAss ? 'unassigned' : ''}">${noAss ? '⚠ Sem responsável' : '👤 ' + c.assigned_to.display_value}</span>
+            <span class="card-time">⏰ Novo</span>
+          </div>
+        </div>`;
+
+      // Encontrar a lane correta no DOM
+      const groupKey = _GK[c.assignment_group.value] || 'l1';
+      // Se a fila atual for diferente da do caso, não injeta (ou injeta e deixa o filtro lidar)
+      if (typeof currentFila !== 'undefined' && currentFila !== groupKey) return;
+
+      const board = document.getElementById('board-wrap');
+      if (!board) return;
+      
+      // Localizar a lane-body correta baseada no título
+      const laneTitles = { critical: 'Crítico', high: 'Alto Risco', medium: 'Atenção', normal: 'Normal', awaiting: 'Aguardando', orphan: 'Sem Responsável' };
+      const targetTitle = laneTitles[lane];
+      
+      const lanes = board.querySelectorAll('.lane');
+      let targetLaneBody = null;
+      for (let l of lanes) {
+        if (l.querySelector('.lane-title').textContent.includes(targetTitle)) {
+          targetLaneBody = l.querySelector('.lane-body');
+          break;
+        }
+      }
+
+      if (targetLaneBody) {
+        const temp = document.createElement('div');
+        temp.innerHTML = html.trim();
+        const newCard = temp.firstChild;
+        
+        // Se houver filtro de analista ativo, verificar se deve mostrar
+        const sel = document.getElementById('analyst-sel');
+        if (sel && sel.value && sel.value !== c.assigned_to.value) {
+          newCard.style.display = 'none';
+        }
+        
+        targetLaneBody.prepend(newCard);
+        
+        // Atualizar contador da lane
+        const countEl = targetLaneBody.closest('.lane').querySelector('.lane-count');
+        if (countEl) countEl.textContent = parseInt(countEl.textContent) + 1;
+        
+        // Remover mensagem de "Sem chamados" se existir
+        const empty = targetLaneBody.querySelector('.lane-empty');
+        if (empty) empty.remove();
+      }
     }
 
     function updateCard(card, data) {
