@@ -21,23 +21,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function runInPage(tabId, month) {
+    // Injeta os scripts necessários no contexto da página
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
       files: ['config.js', 'ems-ops.js']
     });
 
+    // Pequeno delay para garantir que o script foi processado pelo browser
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
       func: (userMonth) => {
-        if (typeof window.runEMSOps !== 'function') {
-          return { error: 'Função runEMSOps não disponível na página.' };
+        // Verifica se a função existe no objeto window
+        const fn = window.runEMSOps;
+        if (typeof fn !== 'function') {
+          return { error: 'Função runEMSOps não encontrada no contexto da página após injeção.' };
         }
         try {
-          return window.runEMSOps(userMonth);
+          return fn(userMonth);
         } catch (e) {
-          return { error: e.message };
+          return { error: `Erro ao executar runEMSOps: ${e.message}` };
         }
       },
       args: [month]

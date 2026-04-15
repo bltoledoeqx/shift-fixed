@@ -1,5 +1,5 @@
 // ── Token fetcher (injected into page context) ──────────────────────────
-function getSnToken() {
+window.getSnToken = function() {
   const token =
     window.g_ck ||
     window.top?.g_ck ||
@@ -11,10 +11,10 @@ function getSnToken() {
   }
 
   return token;
-}
+};
 
 // ── Main injected function ────────────────────────────────────────────────
-function runEMSOps(userMes) {
+window.runEMSOps = function(userMes) {
 
   // ── Constants ─────────────────────────────────────────────────────────
   const token = getSnToken();
