@@ -25,3 +25,13 @@ window.addEventListener('message', event => {
     });
   }
 });
+
+// Relay para abertura de dashboard (caso window.open falhe no contexto MAIN)
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'EMS_RELAY_TO_EXTENSION') {
+    chrome.runtime.sendMessage({
+      type: 'EMS_OPEN_DASHBOARD_POPUP',
+      html: event.data.html
+    });
+  }
+});

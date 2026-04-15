@@ -20,9 +20,16 @@ document.addEventListener('DOMContentLoaded', () => {
     statusEl.textContent = message;
   }
 
+  // Escuta mensagens da página para abrir o dashboard se o window.open falhar lá
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'EMS_OPEN_DASHBOARD_POPUP' && message.html) {
+      const blob = new Blob([message.html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      chrome.tabs.create({ url: url });
+    }
+  });
+
   async function runInPage(tabId, month) {
-    // Injeta os scripts via script tag para garantir que rodem no contexto MAIN (window)
-    // e tenham acesso às variáveis globais do ServiceNow (g_ck)
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
@@ -37,21 +44,28 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         }
 
+        // Listener para capturar o HTML e enviar para o background/popup
+        window.addEventListener('message', function handler(event) {
+          if (event.data && event.data.type === 'EMS_OPEN_DASHBOARD') {
+            window.removeEventListener('message', handler);
+            // Envia para o content script (que repassará para o popup/background)
+            window.postMessage({ type: 'EMS_RELAY_TO_EXTENSION', html: event.data.html }, '*');
+          }
+        });
+
         async function init() {
           try {
-            // Injeta config.js e ems-ops.js sequencialmente
             await injectScript(configUrl);
             await injectScript(scriptUrl);
 
-            // Verifica se a função foi carregada no window
             if (typeof window.runEMSOps === 'function') {
               window.runEMSOps(userMonth);
               return { success: true };
             } else {
-              return { error: 'Função runEMSOps não encontrada no window após injeção via tag.' };
+              return { error: 'Função runEMSOps não encontrada no window.' };
             }
           } catch (e) {
-            return { error: `Erro na injeção de scripts: ${e.message}` };
+            return { error: `Erro na injeção: ${e.message}` };
           }
         }
 
@@ -64,8 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
       ]
     });
 
-    // Como a execução real acontece dentro do func acima, o result virá de lá
-    // Mas o executeScript retorna um array de resultados
     return { success: true }; 
   }
 
@@ -84,7 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const currentMonth = new Date().getMonth() + 1;
       await runInPage(tab.id, currentMonth);
-      // Se não lançou erro, assumimos sucesso na injeção
       showStatus('success', msg.opened || '✅ Painel aberto!');
     } catch (error) {
       showStatus('error', `❌ ${error.message}`);

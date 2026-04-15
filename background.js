@@ -260,3 +260,16 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
     .catch(err   => sendResponse({ ok: false, error: err.message }));
   return true;
 });
+
+// Suporte para abertura de abas (caso o popup feche antes da renderização terminar)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'EMS_OPEN_DASHBOARD_POPUP' && message.html) {
+    const blob = new Blob([message.html], { type: 'text/html' });
+    const reader = new FileReader();
+    reader.onload = function() {
+      chrome.tabs.create({ url: reader.result });
+    };
+    reader.readAsDataURL(blob);
+    return true;
+  }
+});

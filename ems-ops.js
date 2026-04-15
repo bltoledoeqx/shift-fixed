@@ -4101,7 +4101,13 @@ document.addEventListener('DOMContentLoaded',()=>{
     .catch(e=>console.error('_emsOpsRender:',e));
   };
 
-  const outWin = window.open('','_blank');
+  let outWin = null;
+  try {
+    outWin = window.open('','_blank');
+  } catch (e) {
+    console.warn('[EMS Ops] window.open bloqueado ou falhou:', e);
+  }
+
   if (outWin) {
     outWin.document.write('<html><body style="background:#F6F8FA;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui"><div style="text-align:center;color:#57606A"><div style="font-size:40px;margin-bottom:12px">🖥</div><div style="font-size:16px;font-weight:600;color:#24292F">EMS Ops Dashboard</div><div style="font-size:13px;margin-top:6px">Carregando dados...</div></div></body></html>');
   }
@@ -4127,8 +4133,15 @@ document.addEventListener('DOMContentLoaded',()=>{
   })
   .then(([ativos, postMortem, resolvedToday, aggL1, aggL2, aggEvent, emsA, emsP, eqixA, eqixP]) => {
     const html = render(ativos, postMortem, [...eqixA,...emsA], [...eqixP,...emsP], mes, resolvedToday, {l1:aggL1,l2:aggL2,event:aggEvent});
-    if (outWin && !outWin.closed) { outWin.document.open(); outWin.document.write(html); outWin.document.close(); }
-    else { const b=new Blob([html],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }
+    if (outWin && !outWin.closed) {
+      outWin.document.open();
+      outWin.document.write(html);
+      outWin.document.close();
+    } else {
+      // Se a janela não abriu ou foi fechada, tenta enviar o HTML de volta para o popup abrir
+      console.log('[EMS Ops] Enviando HTML via postMessage para abertura segura.');
+      window.postMessage({ type: 'EMS_OPEN_DASHBOARD', html: html }, '*');
+    }
   })
   .catch(e => {
     console.error('EMS Ops error:', e);
